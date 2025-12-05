@@ -1,0 +1,10 @@
+Flask
+flask-smorest
+flask-sqlalchemy
+flask-jwt-extended
+flask-migrate
+marshmallow
+pymysql
+python-dotenv
+authlib
+requests
