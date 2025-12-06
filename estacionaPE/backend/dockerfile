@@ -31,3 +31,5 @@ EXPOSE 5000
 # Ejecutar Flask en modo producción con waitress (recomendado)
 RUN pip install waitress
 
+# Esta línea usa el puerto que Render nos asigna ($PORT)
+CMD gunicorn --bind 0.0.0.0:$PORT app:app
