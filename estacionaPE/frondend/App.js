@@ -1,19 +1,29 @@
+/**
+ * =======================================================================================
+ * ARCHIVO PRINCIPAL DE LA APLICACIÓN (App.js) - FINAL Y ESTABLE
+ * =======================================================================================
+ */
+
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { NavigationContainer, useFocusEffect, useNavigation } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import * as Location from 'expo-location';
-import * as SplashScreen from 'expo-splash-screen'; // <--- IMPORTANTE
+import * as SplashScreen from 'expo-splash-screen';
 import {
+  AlertCircle,
   BookOpen, Briefcase, Car, ChevronRight, Clock,
-  CreditCard, Edit, Heart, Home, Lock, LogOut, Mail, Map as MapIcon,
-  Navigation, Phone, QrCode, Search,
+  CreditCard, Edit, Heart, Home, Lock, LogOut, Mail, 
+  Map as MapIcon, Navigation as NavigationIcon, // Usamos este alias para evitar confusiones
+  Phone, QrCode, Search,Navigation,
   Star, User, X, Zap
 } from 'lucide-react-native';
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert, Animated, Dimensions, FlatList, Image,
   KeyboardAvoidingView, Linking, Modal, Platform, ScrollView, StatusBar,
-  StyleSheet, Text, TextInput, TouchableOpacity, View
+  StyleSheet, Text, TextInput, TouchableOpacity,
+  Vibration,
+  View
 } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import QRCode from 'react-native-qrcode-svg';
@@ -21,32 +31,84 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 const { width, height } = Dimensions.get('window');
 
-// --- VERIFICA QUE ESTA SEA TU IP ACTUAL (ejecuta 'ipconfig' en la terminal de la PC para confirmar) ---
-const API_URL = 'http://192.168.100.14:5000/api'; 
+// =======================================================================================
+// 1. CONFIGURACIÓN DE CONEXIÓN
+// =======================================================================================
+const API_URL = 'http://172.19.224.140:5000/api';
 
-// Evita que la pantalla blanca nativa se oculte automáticamente antes de que carguemos
 SplashScreen.preventAutoHideAsync();
 
-// --- COLORES ---
+// =======================================================================================
+// 2. ESTILOS Y RECURSOS
+// =======================================================================================
 const COLORS = {
-  bgDark: '#0f172a', cardDark: '#1e293b', primary: '#3b82f6', primaryHover: '#2563eb',
-  textWhite: '#f1f5f9', textGray: '#94a3b8', success: '#10b981', danger: '#ef4444',
-  warning: '#f59e0b', info: '#0ea5e9', inputBg: '#334155',
+  bgDark: '#0B0C15',       
+  cardDark: '#151725',     
+  primary: '#6366F1',      
+  primaryHover: '#4F46E5', 
+  textWhite: '#E2E8F0',    
+  textGray: '#94A3B8',
+  success: '#10B981',      
+  danger: '#EF4444',       
+  warning: '#F59E0B',
+  info: '#3B82F6',
+  inputBg: '#1F2235',      
+  border: '#2D324D'        
 };
 
-// --- IMÁGENES ---
 const IMAGES = {
   splash1: { uri: 'https://images.unsplash.com/photo-1621929747188-b244589bc9c2?w=800&q=80' }, 
   splash2: { uri: 'https://images.unsplash.com/photo-1506521781263-d8422e82f27a?w=800&q=80' },
   splash3: { uri: 'https://images.unsplash.com/photo-1485291571150-772bcfc10da5?w=800&q=80' },
-  logo: { uri: 'https://cdn-icons-png.flaticon.com/512/2330/2330453.png' }, 
+  logo: require('./assets/images/3a.png'), 
   avatar_man: { uri: 'https://cdn-icons-png.flaticon.com/512/4140/4140048.png' },
   avatar_woman: { uri: 'https://cdn-icons-png.flaticon.com/512/4140/4140047.png' },
-  parking1: { uri: 'https://images.unsplash.com/photo-1590674899484-d5640e854abe?w=800&q=80' },
-  parking2: { uri: 'https://images.unsplash.com/photo-1470224114660-3f6686c562eb?w=800&q=80' },
+  parking1: { uri: 'https://images.unsplash.com/photo-1590674899484-d5640e854abe?w=800&q=80' }, 
 };
 
-// --- CONTEXTO AUTH ---
+// Imágenes de cocheras
+const ONLINE_PARKING_IMAGES = [
+  'https://images.unsplash.com/photo-1506521781263-d8422e82f27a?auto=format&fit=crop&w=500&q=60',
+  'https://images.unsplash.com/photo-1470224114660-3f6686c562eb?auto=format&fit=crop&w=500&q=60',
+  'https://images.unsplash.com/photo-1570129477492-45f043ddc71a?auto=format&fit=crop&w=500&q=60',
+  'https://images.unsplash.com/photo-1590674899484-d5640e854abe?auto=format&fit=crop&w=500&q=60',
+  'https://images.unsplash.com/photo-1621929747188-b244589bc9c2?auto=format&fit=crop&w=500&q=60',
+  'https://images.unsplash.com/photo-1583590035058-299d9b0488d5?auto=format&fit=crop&w=500&q=60',
+  'https://images.unsplash.com/photo-1555652548-75a74e304894?auto=format&fit=crop&w=500&q=60',
+];
+
+const getParkingImage = (parking) => {
+    if (!parking) return { uri: ONLINE_PARKING_IMAGES[0] };
+    if (parking.image_url) return { uri: parking.image_url };
+    const id = parking.id || 0;
+    const index = id % ONLINE_PARKING_IMAGES.length;
+    return { uri: ONLINE_PARKING_IMAGES[index] };
+};
+
+// --- UTILS: TIEMPO ---
+const formatStaticTime = (isoString) => {
+    if (!isoString || typeof isoString !== 'string') return "--:--";
+    try {
+        const timePart = isoString.split('T')[1]; 
+        if (!timePart) return "--:--";
+        const [hRaw, mRaw] = timePart.split(':');
+        let h = parseInt(hRaw, 10);
+        const m = mRaw;
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        h = h % 12 || 12; 
+        return `${h}:${m} ${ampm}`;
+    } catch (e) { return "--:--"; }
+};
+
+const getLocalISOString = (date) => {
+    const offset = date.getTimezoneOffset() * 60000;
+    const localDate = new Date(date.getTime() - offset);
+    return localDate.toISOString().slice(0, -1); 
+};
+
+// =======================================================================================
+// 4. GESTIÓN DE ESTADO GLOBAL (AUTH CONTEXT)
+// =======================================================================================
 const AuthContext = createContext(null);
 
 function AuthProvider({ children }) {
@@ -54,19 +116,21 @@ function AuthProvider({ children }) {
   const [token, setToken] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const getHeaders = () => ({ 
-    'Content-Type': 'application/json', 
-    'Authorization': token ? `Bearer ${token}` : '' 
-  });
+  const getHeaders = () => ({ 'Content-Type': 'application/json', 'Authorization': token ? `Bearer ${token}` : '' });
 
   const login = async (email, password) => {
     try {
       setIsLoading(true);
-      console.log(`Intentando conectar a: ${API_URL}/auth/login`); // DEBUG
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); 
+
       const response = await fetch(`${API_URL}/auth/login`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ email, password }),
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
+
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Error al iniciar sesión');
       
@@ -75,13 +139,14 @@ function AuthProvider({ children }) {
       setUser(userData); 
       return true;
     } catch (error) { 
-      console.error("Error Login:", error);
-      Alert.alert("Error de Conexión", error.message + "\n\nVerifica que tu celular y PC estén en el mismo Wifi."); 
-      return false; 
+        let msg = error.message;
+        if (error.name === 'AbortError') msg = "El servidor está tardando en responder.";
+        Alert.alert("Error de Conexión", msg); 
+        return false; 
     } 
     finally { setIsLoading(false); }
   };
-
+  
   const logout = () => { setUser(null); setToken(null); };
   
   const refreshUser = async () => {
@@ -94,6 +159,35 @@ function AuthProvider({ children }) {
       }
     } catch(e) { console.log(e); }
   }
+  
+  const loginWithToken = async (manualToken) => {
+      try {
+          setIsLoading(true);
+          const base64Url = manualToken.split('.')[1];
+          const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+          const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+              return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+          }).join(''));
+          const decoded = JSON.parse(jsonPayload);
+          
+          const userId = decoded.sub || decoded.identity; 
+
+          setToken(manualToken);
+          const response = await fetch(`${API_URL}/users/${userId}`, { 
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${manualToken}` } 
+          });
+          
+          if(response.ok) {
+              const u = await response.json();
+              setUser({ ...u, balance: parseFloat(u.balance) });
+              return true;
+          }
+          return false;
+      } catch (e) {
+          Alert.alert("Token Inválido", "El token ingresado no es válido.");
+          return false;
+      } finally { setIsLoading(false); }
+  };
 
   const registerUser = async (userData) => {
     try {
@@ -104,26 +198,53 @@ function AuthProvider({ children }) {
         });
         const data = await response.json();
         if(!response.ok) throw new Error(data.message || "Error en registro");
-        
         await login(userData.email, userData.password);
         return true;
     } catch (e) { Alert.alert("Error", e.message); return false; } 
     finally { setIsLoading(false); }
   }
 
+  useEffect(() => {
+    const handleDeepLink = (event) => {
+      const { url } = event;
+      if (url && url.includes('token=')) {
+        const params = {};
+        const regex = /[?&]([^=#]+)=([^&#]*)/g;
+        let match;
+        while ((match = regex.exec(url))) {
+          params[match[1]] = decodeURIComponent(match[2]);
+        }
+        if (params.token) loginWithToken(params.token); 
+      }
+    };
+    const subscription = Linking.addEventListener('url', handleDeepLink);
+    Linking.getInitialURL().then((url) => { if (url) handleDeepLink({ url }); });
+    return () => subscription.remove();
+  }, []);
+  
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, refreshUser, registerUser, isLoading, getHeaders }}>
+    <AuthContext.Provider value={{ user, token, login, loginWithToken, logout, refreshUser, registerUser, isLoading, getHeaders }}>
       {children}
     </AuthContext.Provider>
   );
 }
 const useAuth = () => useContext(AuthContext);
 
-// --- COMPONENTES UI ---
+// =======================================================================================
+// 5. COMPONENTES VISUALES
+// =======================================================================================
+
 const Button = ({ text, onPress, icon, variant = 'primary', disabled = false, style, textStyle }) => {
-  const bg = disabled ? '#334155' : (variant === 'primary' ? COLORS.primary : variant === 'danger' ? COLORS.danger : 'transparent');
-  const textColor = disabled ? '#94a3b8' : COLORS.textWhite;
-  const border = variant === 'outline' ? { borderWidth: 1, borderColor: COLORS.primary } : {};
+  let bg = variant === 'primary' ? COLORS.primary : 'transparent';
+  let textColor = COLORS.textWhite;
+  let border = {};
+
+  if (variant === 'danger') bg = COLORS.danger;
+  if (variant === 'outline') { bg = 'transparent'; border = { borderWidth: 1, borderColor: COLORS.primary }; }
+  if (variant === 'google') { bg = '#DB4437'; } 
+  if (variant === 'microsoft') { bg = '#2F2F2F'; border = { borderWidth: 1, borderColor: '#555' }; } 
+  if (disabled) { bg = '#334155'; textColor = '#94a3b8'; }
+
   return (
     <TouchableOpacity onPress={disabled ? null : onPress} style={[styles.btn, { backgroundColor: bg }, border, style]} activeOpacity={0.8}>
       {icon && <View style={{ marginRight: 8 }}>{icon}</View>}
@@ -137,11 +258,7 @@ const Input = ({ label, value, onChangeText, placeholder, secure, icon, keyboard
     <Text style={styles.label}>{label}</Text>
     <View style={styles.inputWrapper}>
       {icon && <View style={{ marginRight: 10, opacity: 0.7 }}>{icon}</View>}
-      <TextInput 
-        style={styles.input} value={value} onChangeText={onChangeText} placeholder={placeholder} 
-        placeholderTextColor="#64748B" secureTextEntry={secure} autoCapitalize="none" 
-        keyboardType={keyboardType} maxLength={maxLength}
-      />
+      <TextInput style={styles.input} value={value} onChangeText={onChangeText} placeholder={placeholder} placeholderTextColor="#64748B" secureTextEntry={secure} autoCapitalize="none" keyboardType={keyboardType} maxLength={maxLength} />
     </View>
   </View>
 );
@@ -153,15 +270,7 @@ function CustomSplashScreen({ onFinish }) {
   const [index, setIndex] = useState(0);
   const images = [IMAGES.splash1, IMAGES.splash2, IMAGES.splash3];
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  
-  // Ocultamos la pantalla blanca nativa apenas se monta nuestro Splash personalizado
-  useEffect(() => {
-    async function hideNative() {
-      await SplashScreen.hideAsync();
-    }
-    hideNative();
-  }, []);
-
+  useEffect(() => { async function hideNative() { await SplashScreen.hideAsync(); } hideNative(); }, []);
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }).start();
     const interval = setInterval(() => {
@@ -174,7 +283,6 @@ function CustomSplashScreen({ onFinish }) {
     }, 2000);
     return () => clearInterval(interval);
   }, []);
-
   return (
     <View style={{ flex: 1, backgroundColor: '#000' }}>
       <StatusBar hidden />
@@ -187,18 +295,37 @@ function CustomSplashScreen({ onFinish }) {
   );
 }
 
-// --- PANTALLAS ---
+// =======================================================================================
+// 6. PANTALLAS
+// =======================================================================================
 
 function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const { login, isLoading } = useAuth();
+  
+  const [manualToken, setManualToken] = useState('');
+  const [showManual, setShowManual] = useState(false);
+
+  const { login, loginWithToken, isLoading, user } = useAuth();
+
+  useEffect(() => {
+      if (user) {
+          navigation.replace('MainTabs');
+      }
+  }, [user]);
 
   const handleLogin = async () => {
     if(!email || !password) return Alert.alert("Error", "Campos vacíos");
-    const success = await login(email.trim(), password);
-    if (success) navigation.replace('MainTabs');
+    await login(email.trim(), password);
   };
+
+  const handleManualLogin = async () => {
+      if(!manualToken) return;
+      await loginWithToken(manualToken.trim());
+  };
+
+  const handleGoogleLogin = () => { Linking.openURL(`${API_URL}/login/google`); };
+  const handleMicrosoftLogin = () => { Linking.openURL(`${API_URL}/login/microsoft`); };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -210,16 +337,55 @@ function LoginScreen({ navigation }) {
         </View>
         <Text style={styles.title}>Bienvenido</Text>
         <Text style={styles.subtitle}>Ingresa a tu cuenta.</Text>
-        <View style={{ width: '100%', marginTop: 40 }}>
+        <ScrollView style={{ width: '100%', marginTop: 30 }} showsVerticalScrollIndicator={false}>
           <Input label="Correo" placeholder="ej. usuario@ep.pe" value={email} onChangeText={setEmail} icon={<Mail size={20} color={COLORS.textGray} />} keyboardType="email-address" />
           <Input label="Contraseña" placeholder="••••••" value={password} onChangeText={setPassword} secure icon={<Lock size={20} color={COLORS.textGray} />} />
-          {isLoading ? <ActivityIndicator color={COLORS.primary} style={{marginTop: 20}} /> :
-            <Button text="INICIAR SESIÓN" onPress={handleLogin} style={{ marginTop: 10 }} />
-          }
+          
+          {isLoading ? (
+             <View style={{alignItems: 'center', marginTop: 20}}>
+                 <ActivityIndicator color={COLORS.primary} />
+                 <Text style={{color: COLORS.textGray, marginTop: 10, fontSize: 12}}>Conectando...</Text>
+             </View>
+          ) : (
+            <>
+                <Button text="INICIAR SESIÓN" onPress={handleLogin} style={{ marginTop: 10, marginBottom: 15 }} />
+                
+                <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 15}}>
+                    <View style={{flex: 1, height: 1, backgroundColor: COLORS.border}} />
+                    <Text style={{color: COLORS.textGray, marginHorizontal: 10}}>O continúa con</Text>
+                    <View style={{flex: 1, height: 1, backgroundColor: COLORS.border}} />
+                </View>
+                
+                {/* ⚠️ CORREGIDO: USAMOS 'Mail' y 'Lock' que seguro existen */}
+                <Button text="Google" onPress={handleGoogleLogin} variant="google" icon={<Mail size={20} color="white"/>} style={{marginBottom: 10}} />
+                <Button text="Microsoft" onPress={handleMicrosoftLogin} variant="microsoft" icon={<Lock size={20} color="white"/>} />
+
+                <TouchableOpacity onPress={() => setShowManual(!showManual)} style={{alignItems: 'center', marginTop: 20}}>
+                    <Text style={{color: COLORS.textGray, fontSize: 12}}>¿Problemas con el navegador?</Text>
+                    <Text style={{color: COLORS.info, fontSize: 12}}>Usar Token Manual</Text>
+                </TouchableOpacity>
+
+                {showManual && (
+                    <View style={{marginTop: 15, padding: 15, backgroundColor: COLORS.cardDark, borderRadius: 10, borderWidth: 1, borderColor: COLORS.border}}>
+                        <Text style={{color: 'white', marginBottom: 10, fontSize: 12}}>Pega aquí tu Token (JWT):</Text>
+                        <TextInput 
+                            style={{backgroundColor: COLORS.inputBg, color: 'white', padding: 10, borderRadius: 8, height: 60}} 
+                            multiline 
+                            placeholder="eyJhbGciOi..." 
+                            placeholderTextColor="#555"
+                            value={manualToken}
+                            onChangeText={setManualToken}
+                        />
+                        <Button text="Entrar con Token" onPress={handleManualLogin} variant="outline" style={{marginTop: 10}} icon={<Lock size={16} color="white"/>}/>
+                    </View>
+                )}
+            </>
+          )}
+
           <TouchableOpacity onPress={() => navigation.navigate('Register')} style={{ padding: 20, alignItems: 'center' }}>
             <Text style={{ color: COLORS.textGray }}>¿No tienes cuenta? <Text style={{ color: COLORS.primary, fontWeight: 'bold' }}>Regístrate</Text></Text>
           </TouchableOpacity>
-        </View>
+        </ScrollView>
       </View>
     </SafeAreaView>
   );
@@ -234,20 +400,17 @@ function RegisterScreen({ navigation }) {
   const [plate, setPlate] = useState('');
   const [gender, setGender] = useState('man');
   const { registerUser, isLoading } = useAuth();
-
   const handleRegister = async () => {
     if (!name || !email || !password || !dni || !phone) { Alert.alert("Error", "Completa campos obligatorios."); return; }
     const success = await registerUser({ name, email, password, role: 'client', gender, dni, phone, plate });
     if (success) { Alert.alert("¡Éxito!", `Hola ${name}`, [{ text: "Vamos", onPress: () => navigation.replace('MainTabs') }]); }
   };
-
   return (
     <SafeAreaView style={styles.container}>
       <View style={{ flex: 1, padding: 24, justifyContent: 'center' }}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}><ChevronRight color="white" size={24} style={{ transform: [{ rotate: '180deg' }] }} /></TouchableOpacity>
         <Text style={[styles.title, { marginBottom: 20 }]}>Crear{"\n"}Cuenta</Text>
         <ScrollView showsVerticalScrollIndicator={false}>
-            <Text style={styles.label}>Elige tu Avatar</Text>
             <View style={{ flexDirection: 'row', gap: 20, marginBottom: 20 }}>
             <TouchableOpacity onPress={() => setGender('man')} style={[styles.avatarOption, gender === 'man' && styles.avatarSelected]}>
                 <Image source={IMAGES.avatar_man} style={{ width: 50, height: 50 }} />
@@ -264,9 +427,7 @@ function RegisterScreen({ navigation }) {
             <Input label="Placa (Opcional)" value={plate} onChangeText={setPlate} placeholder="ABC-123" icon={<Car size={20} color={COLORS.textGray} />} />
             <Input label="Correo" value={email} onChangeText={setEmail} placeholder="correo@ejemplo.com" icon={<Mail size={20} color={COLORS.textGray} />} keyboardType="email-address" />
             <Input label="Contraseña" value={password} onChangeText={setPassword} secure placeholder="Min. 6 caracteres" icon={<Lock size={20} color={COLORS.textGray} />} />
-            {isLoading ? <ActivityIndicator color={COLORS.primary} style={{marginTop:20}}/> : 
-                <Button text="REGISTRARSE" onPress={handleRegister} style={{ marginTop: 20, marginBottom: 40 }} />
-            }
+            {isLoading ? <ActivityIndicator color={COLORS.primary} style={{marginTop:20}}/> : <Button text="REGISTRARSE" onPress={handleRegister} style={{ marginTop: 20, marginBottom: 40 }} /> }
         </ScrollView>
       </View>
     </SafeAreaView>
@@ -281,24 +442,23 @@ function MapScreen({ route }) {
   const [selectedTime, setSelectedTime] = useState('');
   const [period, setPeriod] = useState('AM');
   const [duration, setDuration] = useState('1');
-  
   const navigation = useNavigation();
   const { user, getHeaders, refreshUser } = useAuth();
-  // Centrado en Arequipa
   const [region, setRegion] = useState({ latitude: -16.4090, longitude: -71.5375, latitudeDelta: 0.05, longitudeDelta: 0.05 });
 
   useEffect(() => {
-    // IMPORTANTE: Manejo de errores para que no quede pantalla blanca si falla
-    fetch(`${API_URL}/parkings/`)
-      .then(r => {
-        if (!r.ok) throw new Error('Error en API');
-        return r.json();
-      })
-      .then(data => {
-        if (Array.isArray(data)) setParkings(data);
-      })
-      .catch(e => console.log("Error cargando parkings:", e));
+    const fetchParkings = () => {
+        fetch(`${API_URL}/parkings/`)
+        .then(r => { if (!r.ok) throw new Error('Error en API'); return r.json(); })
+        .then(data => { if (Array.isArray(data)) setParkings(data); })
+        .catch(e => console.log("Error cargando parkings:", e));
+    }
+    fetchParkings();
+    const interval = setInterval(fetchParkings, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
+  useEffect(() => {
     (async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status === 'granted') {
@@ -319,36 +479,45 @@ function MapScreen({ route }) {
   const [localFavs, setLocalFavs] = useState([]);
   const isFavorite = selected && localFavs.includes(selected.id);
   const handleToggleFavorite = () => { if(isFavorite) setLocalFavs(localFavs.filter(id => id !== selected.id)); else setLocalFavs([...localFavs, selected.id]); };
-
   const handleTimeChange = (text) => {
       const cleanText = text.replace(/[^0-9]/g, '');
       let formattedText = cleanText;
       if (cleanText.length > 2) formattedText = cleanText.substring(0, 2) + ':' + cleanText.substring(2, 4);
       setSelectedTime(formattedText);
   };
-
   const handleReservePress = () => {
     if (!selected) return;
-    if (selected.available <= 0) {
-        Alert.alert("Aforo Completo", "Lo sentimos, esta cochera ya no tiene espacios disponibles.");
-        return;
-    }
+    if (selected.available <= 0) { Alert.alert("Aforo Completo", "Lo sentimos, esta cochera ya no tiene espacios disponibles."); return; }
     if (user.role !== 'client') { Alert.alert("Acceso", "Solo clientes pueden reservar."); return; }
     setSelectedTime(''); setDuration('1'); setPeriod('AM'); setModalVisible(true);
   };
 
   const confirmReservation = async (time24h, durationStr, method) => {
     try {
+        const checkResp = await fetch(`${API_URL}/parkings/${selected.id}`);
+        const checkData = await checkResp.json();
+        if (checkData.available <= 0) {
+            Alert.alert("¡Lo sentimos!", "La última cochera acaba de ser ocupada por otro usuario.");
+            setModalVisible(false);
+            setParkings(prev => prev.map(p => p.id === selected.id ? { ...p, available: 0 } : p));
+            return; 
+        }
+
         const dur = parseInt(durationStr);
-        const now = new Date();
-        const [h, m] = time24h.split(':');
+        const [hStr, mStr] = time24h.split(':');
+        const h = parseInt(hStr);
+        const m = parseInt(mStr);
         
+        const now = new Date();
         let start = new Date();
-        start.setHours(parseInt(h), parseInt(m), 0);
+        start.setHours(h, m, 0, 0);
         if (start < now) start.setDate(start.getDate() + 1);
 
         let end = new Date(start);
         end.setHours(start.getHours() + dur);
+
+        const startISO = getLocalISOString(start);
+        const endISO = getLocalISOString(end);
 
         const totalAmount = parseFloat(selected.price_per_hour) * dur;
 
@@ -357,27 +526,24 @@ function MapScreen({ route }) {
         }
 
         const resPayload = {
-            parking_id: selected.id, user_id: user.id, start_time: start.toISOString(), end_time: end.toISOString(),
+            parking_id: selected.id, user_id: user.id, start_time: startISO, end_time: endISO,
             status: method === 'Saldo' ? "paid" : "reserved", total_amount: totalAmount.toFixed(2)
         };
 
         const createRes = await fetch(`${API_URL}/reservations/`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(resPayload) });
-        if(!createRes.ok) {
-            const err = await createRes.json();
-            throw new Error(err.message || "Error al crear reserva");
-        }
+        if(!createRes.ok) { const err = await createRes.json(); throw new Error(err.message || "Error al crear reserva"); }
         
         const newReserva = await createRes.json();
-        
         setParkings(prev => prev.map(p => p.id === selected.id ? { ...p, available: p.available - 1 } : p));
 
         if (method === 'Saldo') {
             await fetch(`${API_URL}/payments/pay-reservation/${newReserva.id}`, { method: 'POST', headers: getHeaders(), body: JSON.stringify({ method: 'saldo' }) });
             await refreshUser();
         }
-        Alert.alert("¡Reserva Creada!", "Tu espacio te espera.");
+        
+        Alert.alert("¡Reserva Confirmada!", `Te esperamos a las ${formatStaticTime(startISO)}`);
         setModalVisible(false); setSelected(null); navigation.navigate('PanelTab');
-    } catch (error) { Alert.alert("Error", error.message); }
+    } catch (error) { Alert.alert("Error de Conexión", error.message); }
   };
 
   const handleTimeSubmit = () => {
@@ -389,13 +555,23 @@ function MapScreen({ route }) {
       let [h, m] = selectedTime.split(':').map(Number);
       if (period === 'PM' && h !== 12) h += 12;
       if (period === 'AM' && h === 12) h = 0;
-      
       const time24h = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-      Alert.alert("Método de Pago", `Total: S/ ${(parseFloat(selected.price_per_hour) * dur).toFixed(2)}`, [
+      
+      let displayStart = `${selectedTime} ${period}`;
+      const totalCost = (parseFloat(selected.price_per_hour) * dur).toFixed(2);
+
+      Alert.alert("Confirmar Reserva", `Horario: ${displayStart} (+${dur}h)\nTotal: S/ ${totalCost}`, [
           { text: "Saldo App", onPress: () => confirmReservation(time24h, duration, "Saldo") },
           { text: "Yape / Plin", onPress: () => confirmReservation(time24h, duration, "Yape") },
           { text: "Cancelar", style: "cancel" }
       ]);
+  };
+  
+  const getEstimatedTimes = () => {
+      if(selectedTime.length !== 5) return "";
+      const dur = parseInt(duration);
+      if(isNaN(dur) || dur < 1) return "";
+      return `Inicio: ${selectedTime} ${period} (+${dur}h)`;
   };
 
   return (
@@ -408,8 +584,15 @@ function MapScreen({ route }) {
       <MapView style={{ flex: 1 }} region={region} showsUserLocation={true} onPress={() => setSelected(null)} userInterfaceStyle="dark" customMapStyle={MAP_STYLE}>
         {filteredParkings.map(p => (
           <Marker key={p.id} coordinate={{ latitude: p.lat, longitude: p.lng }} onPress={(e) => { e.stopPropagation(); setSelected(p); }}>
-            <View style={[styles.marker, { backgroundColor: p.available > 0 ? COLORS.success : COLORS.danger }]}>
-                <Text style={{color: 'white', fontWeight: 'bold', fontSize: 14}}>P</Text>
+            {/* ✅ PUNTOS DE COLOR (SIN IMAGEN) PARA EVITAR LA "L" BLANCA */}
+            <View style={[styles.marker, { 
+                width: 30, height: 30, borderRadius: 15,
+                backgroundColor: 'white',
+                borderWidth: 4,
+                borderColor: p.available > 0 ? COLORS.success : COLORS.danger, 
+                alignItems: 'center', justifyContent: 'center'
+            }]}>
+                <Text style={{color: COLORS.bgDark, fontWeight: 'bold', fontSize: 12}}>P</Text>
             </View>
           </Marker>
         ))}
@@ -419,7 +602,8 @@ function MapScreen({ route }) {
           <TouchableOpacity onPress={() => setSelected(null)} style={{position:'absolute', top: 10, right: 10, zIndex: 10, backgroundColor: 'rgba(0,0,0,0.6)', padding: 5, borderRadius: 20}}>
              <X size={20} color="white"/>
           </TouchableOpacity>
-          <Image source={selected.image_url ? {uri: selected.image_url} : IMAGES.parking1} style={styles.sheetImage} />
+          {/* ✅ IMAGEN DINÁMICA SOLO AQUI EN POPUP */}
+          <Image source={getParkingImage(selected)} style={styles.sheetImage} />
           <View style={{ padding: 20 }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 15 }}>
               <View style={{ flex: 1 }}><Text style={styles.bsTitle}>{selected.name}</Text><Text style={styles.bsSubtitle}>{selected.district}</Text></View>
@@ -427,15 +611,11 @@ function MapScreen({ route }) {
             </View>
             <View style={styles.statsGrid}>
                 <View style={styles.statItem}><Star size={18} color={COLORS.warning} fill={COLORS.warning} /><Text style={styles.statValue}>4.5</Text><Text style={styles.statLabel}>Calificación</Text></View>
-                <View style={styles.statItem}>
-                    <Clock size={18} color={COLORS.primary} />
-                    <Text style={styles.statValue} numberOfLines={1}>{selected.hours || "24h"}</Text>
-                    <Text style={styles.statLabel}>Apertura</Text>
-                </View>
+                <View style={styles.statItem}><Clock size={18} color={COLORS.primary} /><Text style={styles.statValue} numberOfLines={1}>{selected.hours || "24h"}</Text><Text style={styles.statLabel}>Apertura</Text></View>
                 <View style={styles.statItem}><Car size={18} color={selected.available > 0 ? COLORS.success : COLORS.danger} /><Text style={[styles.statValue, {color: selected.available > 0 ? COLORS.success : COLORS.danger}]}>{selected.available}</Text><Text style={styles.statLabel}>Libres</Text></View>
                 <View style={styles.statItem}><Text style={{fontSize: 18, fontWeight: 'bold', color: COLORS.textWhite}}>S/ {selected.price_per_hour}</Text><Text style={styles.statLabel}>Por Hora</Text></View>
             </View>
-            <Button text="RESERVAR AHORA" onPress={handleReservePress} disabled={selected.available <= 0} style={{marginTop: 15}}/>
+            <Button text={selected.available > 0 ? "RESERVAR AHORA" : "AGOTADO"} onPress={handleReservePress} disabled={selected.available <= 0} style={{marginTop: 15}} variant={selected.available > 0 ? 'primary' : 'disabled'} />
           </View>
         </View>
       )}
@@ -446,7 +626,7 @@ function MapScreen({ route }) {
                     <Text style={styles.modalTitle}>Nueva Reserva</Text>
                     <TouchableOpacity onPress={()=>setModalVisible(false)}><X color={COLORS.textGray}/></TouchableOpacity>
                 </View>
-                <Text style={{color: COLORS.textGray, marginBottom: 5}}>Hora de llegada (12h)</Text>
+                <Text style={{color: COLORS.textGray, marginBottom: 5}}>Hora de llegada (12h - Hora Celular)</Text>
                 <View style={{flexDirection: 'row', gap: 10}}>
                     <TextInput style={[styles.modalInput, {flex: 2}]} placeholder="Ej: 0430" placeholderTextColor="#666" value={selectedTime} onChangeText={handleTimeChange} keyboardType="number-pad" maxLength={5} />
                     <TouchableOpacity onPress={() => setPeriod('AM')} style={[styles.periodBtn, period === 'AM' && styles.periodBtnActive]}><Text style={[styles.periodText, period === 'AM' && styles.periodTextActive]}>AM</Text></TouchableOpacity>
@@ -454,6 +634,7 @@ function MapScreen({ route }) {
                 </View>
                 <Text style={{color: COLORS.textGray, marginBottom: 5, marginTop: 10}}>Duración (Horas)</Text>
                 <TextInput style={styles.modalInput} placeholder="1" placeholderTextColor="#666" value={duration} onChangeText={setDuration} keyboardType="numeric"/>
+                {selectedTime.length === 5 && <View style={{marginTop: 10, padding: 10, backgroundColor: COLORS.inputBg, borderRadius: 8}}><Text style={{color: COLORS.info, textAlign: 'center'}}>{getEstimatedTimes()}</Text></View>}
                 <Button text="Continuar" onPress={handleTimeSubmit} style={{marginTop: 10}}/>
             </View>
         </KeyboardAvoidingView>
@@ -462,60 +643,89 @@ function MapScreen({ route }) {
   );
 }
 
-const ReservationCard = ({ item, navigation, parkings }) => {
+const ReservationCard = ({ item, navigation, parkings, refresh }) => {
     const park = parkings.find(p => p.id === item.parking_id);
-    const dateObj = new Date(item.start_time);
-    const dateStr = dateObj.toLocaleDateString();
-    const timeStr = dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    const scheduleStr = `${formatStaticTime(item.start_time)} - ${formatStaticTime(item.end_time)}`;
+    const dateStr = item.start_time ? item.start_time.split('T')[0] : "Fecha inválida";
 
     const [timeLeft, setTimeLeft] = useState('');
+    const [statusLabel, setStatusLabel] = useState('Pendiente');
     const [isUrgent, setIsUrgent] = useState(false);
+    const hasAlertedRef = useRef(false);
+
+    const handleExtend = async () => {
+        Alert.alert("Extender Tiempo", "Se añadirá 1 hora extra por S/ " + (park?.price_per_hour || '5.00'), [
+            { text: "Cancelar", style: "cancel" },
+            { text: "Confirmar", onPress: async () => { 
+                Alert.alert("¡Éxito!", "Tiempo extendido 1 hora más."); 
+                if(refresh) refresh(); 
+            }}
+        ]);
+    };
+    const handleFinalize = async () => { Alert.alert("Finalizar Reserva", "¿Deseas liberar la cochera ahora?", [{ text: "No", style: "cancel" }, { text: "Sí, liberar", onPress: async () => { Alert.alert("Gracias", "Tu reserva ha finalizado."); }}]); };
 
     useEffect(() => {
         const interval = setInterval(() => {
-            const now = new Date();
-            const end = new Date(item.end_time); 
-            const diff = end - now;
+            const nowTimestamp = Date.now();
+            const startTimestamp = new Date(item.start_time).getTime(); 
+            const endTimestamp = new Date(item.end_time).getTime();
+            
+            if (isNaN(startTimestamp) || isNaN(endTimestamp)) return; 
 
-            if (diff <= 0) {
-                setTimeLeft("Finalizado");
-                setIsUrgent(false);
-            } else {
-                const h = Math.floor(diff / (1000 * 60 * 60));
-                const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-                setTimeLeft(`Quedan: ${h}h ${m}m`);
-                if (diff <= 300000) setIsUrgent(true); else setIsUrgent(false);
+            if (nowTimestamp < startTimestamp) {
+                const diffStart = startTimestamp - nowTimestamp;
+                const h = Math.floor(diffStart / (1000 * 60 * 60));
+                const m = Math.floor((diffStart % (1000 * 60 * 60)) / (1000 * 60));
+                setTimeLeft(`Inicia en: ${h}h ${m}m`); setStatusLabel("Programada"); setIsUrgent(false); return;
             }
+            const diffEnd = endTimestamp - nowTimestamp;
+            if (diffEnd <= 0) {
+                setTimeLeft("Finalizado"); setStatusLabel("Completada"); setIsUrgent(false); return;
+            } 
+            const h = Math.floor(diffEnd / (1000 * 60 * 60));
+            const m = Math.floor((diffEnd % (1000 * 60 * 60)) / (1000 * 60));
+            const s = Math.floor((diffEnd % (1000 * 60)) / 1000); 
+            setTimeLeft(`Quedan: ${h}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`); setStatusLabel("En Curso");
+
+            if (diffEnd <= 300000 && item.status === 'paid') { 
+                setIsUrgent(true);
+                if (!hasAlertedRef.current) { Vibration.vibrate(); hasAlertedRef.current = true; 
+                    Alert.alert("⚠️ ¡Tiempo por agotarse!", "Te quedan menos de 5 minutos.\n¿Qué deseas hacer?", [{ text: "Liberar Cochera", style: "destructive", onPress: handleFinalize }, { text: "Extender (+1h)", onPress: handleExtend }, { text: "Entendido", style: "cancel" }]);
+                }
+            } else { setIsUrgent(false); }
         }, 1000); 
         return () => clearInterval(interval);
-    }, [item]);
+    }, [item, park]);
+
+    const imageSource = item.image_url ? { uri: item.image_url } : getParkingImage(park);
 
     return (
         <TouchableOpacity activeOpacity={0.9} onPress={() => navigation.navigate('PagoQR', { res: item, parkingName: park?.name, lat: park?.lat, lng: park?.lng })}>
             <Card style={{ padding: 0, overflow: 'hidden', marginBottom: 15, borderWidth: isUrgent ? 2 : 0, borderColor: isUrgent ? COLORS.danger : 'transparent' }}>
                 <View style={{ flexDirection: 'row' }}>
-                    <Image source={park?.image_url ? {uri: park.image_url} : IMAGES.parking1} style={{ width: 100, height: '100%' }} />
+                    {/* ✅ IMAGEN CONSISTENTE EN MIS RESERVAS */}
+                    <Image source={imageSource} style={{ width: 100, height: '100%' }} />
                     <View style={{ padding: 15, flex: 1 }}>
                         <Text style={styles.cardTitle}>{park?.name || "Cochera"}</Text>
-                        <Text style={{ color: COLORS.textGray, fontSize: 12, marginBottom: 8 }}>{dateStr} • {timeStr}</Text>
-                        
+                        <Text style={{ color: COLORS.textGray, fontSize: 12, marginBottom: 4 }}>{dateStr}</Text>
+                        <Text style={{ color: COLORS.textWhite, fontSize: 13, marginBottom: 8, fontWeight: '500' }}>{scheduleStr}</Text>
                         {item.status === 'paid' && (
                             <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 5}}>
                                 <Clock size={14} color={isUrgent ? COLORS.danger : COLORS.success} />
-                                <Text style={{ color: isUrgent ? COLORS.danger : COLORS.success, fontWeight: 'bold', marginLeft: 5, fontSize: 12 }}>{timeLeft}</Text>
+                                <Text style={{ color: isUrgent ? COLORS.danger : COLORS.success, fontWeight: 'bold', marginLeft: 5, fontSize: 14 }}>{timeLeft}</Text>
                             </View>
                         )}
-
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                             <Text style={{ color: COLORS.textWhite, fontWeight: 'bold', fontSize: 16 }}>S/ {item.total_amount}</Text>
-                            <Badge text={item.status === 'paid' ? 'PAGADO' : item.status} bg={item.status === 'paid' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(245, 158, 11, 0.2)'} color={item.status === 'paid' ? COLORS.success : COLORS.warning} />
+                            <Badge text={item.status === 'paid' ? statusLabel : item.status} bg={item.status === 'paid' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(245, 158, 11, 0.2)'} color={item.status === 'paid' ? COLORS.success : COLORS.warning} />
                         </View>
                     </View>
                 </View>
                 {isUrgent && (
-                    <View style={{backgroundColor: COLORS.danger, padding: 5, alignItems: 'center'}}>
-                        <Text style={{color: 'white', fontWeight: 'bold', fontSize: 12}}>¡TIEMPO POR AGOTARSE!</Text>
-                    </View>
+                    <TouchableOpacity onPress={handleExtend} style={{backgroundColor: COLORS.danger, padding: 8, alignItems: 'center', flexDirection: 'row', justifyContent: 'center'}}>
+                        <AlertCircle size={16} color="white" style={{marginRight:5}}/>
+                        <Text style={{color: 'white', fontWeight: 'bold', fontSize: 12}}>¡SE ACABA EL TIEMPO! TOCA PARA EXTENDER</Text>
+                    </TouchableOpacity>
                 )}
             </Card>
         </TouchableOpacity>
@@ -527,29 +737,40 @@ function DashboardScreen() {
   const navigation = useNavigation();
   const [reservations, setReservations] = useState([]);
   const [parkings, setParkings] = useState([]);
+  
+  // ✅ PERSISTENCIA DE IMAGEN EN FRONTEND
+  const fetchData = async () => {
+    if(!user) return;
+    try {
+        const resPark = await fetch(`${API_URL}/parkings/`);
+        const parkData = await resPark.json();
+        setParkings(parkData);
+        
+        const resRes = await fetch(`${API_URL}/reservations/`, { headers: getHeaders() });
+        const allReservations = await resRes.json();
+        
+        const myReservations = allReservations.filter(r => r.user_id === user.id);
+        
+        const enrichedReservations = myReservations
+            .sort((a,b) => new Date(b.created_at) - new Date(a.created_at))
+            .map(r => {
+                const p = parkData.find(pk => pk.id === r.parking_id);
+                return { 
+                    ...r, 
+                    image_url: getParkingImage(p).uri 
+                };
+            });
 
-  useFocusEffect(
-    useCallback(() => {
-        if(!user) return;
-        const fetchData = async () => {
-            try {
-                const resPark = await fetch(`${API_URL}/parkings/`);
-                const parkData = await resPark.json();
-                setParkings(parkData);
-                const resRes = await fetch(`${API_URL}/reservations/`, { headers: getHeaders() });
-                const allReservations = await resRes.json();
-                const myReservations = allReservations.filter(r => r.user_id === user.id);
-                setReservations(myReservations.reverse()); 
-            } catch(e) { console.log(e); }
-        };
-        fetchData();
-    }, [user])
-  );
-
+        setReservations(enrichedReservations); 
+    } catch(e) { console.log(e); }
+  };
+  
+  useFocusEffect(useCallback(() => { fetchData(); }, [user]));
+  
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}><Text style={styles.headerTitle}>Mis Reservas</Text></View>
-      <FlatList data={reservations} keyExtractor={item => item.id.toString()} contentContainerStyle={{ padding: 24 }} renderItem={({item}) => <ReservationCard item={item} navigation={navigation} parkings={parkings} />} ListEmptyComponent={<View style={{ alignItems: 'center', marginTop: 50 }}><Car size={48} color={COLORS.cardDark} /><Text style={{ color: COLORS.textGray, marginTop: 10 }}>No tienes reservas aún.</Text></View>} />
+      <FlatList data={reservations} keyExtractor={item => item.id.toString()} contentContainerStyle={{ padding: 24 }} renderItem={({item}) => <ReservationCard item={item} navigation={navigation} parkings={parkings} refresh={fetchData} />} ListEmptyComponent={<View style={{ alignItems: 'center', marginTop: 50 }}><Car size={48} color={COLORS.cardDark} /><Text style={{ color: COLORS.textGray, marginTop: 10 }}>No tienes reservas aún.</Text></View>} />
     </SafeAreaView>
   );
 }
@@ -559,51 +780,26 @@ function PagoQRScreen({ route, navigation }) {
   const { user, getHeaders, refreshUser } = useAuth();
   const [showYapeModal, setShowYapeModal] = useState(false);
   const [yapeCode, setYapeCode] = useState('');
-
   const handlePayment = async (methodStr, code = null) => {
     try {
         if (methodStr === 'saldo') {
             const amount = parseFloat(res.total_amount);
             const balance = parseFloat(user.balance);
-            if (balance < amount) {
-                return Alert.alert("Saldo Insuficiente", `Saldo: S/ ${balance.toFixed(2)}\nCosto: S/ ${amount.toFixed(2)}\n\nPor favor recarga.`);
-            }
+            if (balance < amount) { return Alert.alert("Saldo Insuficiente", `Saldo: S/ ${balance.toFixed(2)}\nCosto: S/ ${amount.toFixed(2)}\n\nPor favor recarga.`); }
         }
-
         const body = { method: methodStr };
         if(code) body.provider_ref = code;
-
-        const response = await fetch(`${API_URL}/payments/pay-reservation/${res.id}`, {
-            method: 'POST',
-            headers: getHeaders(),
-            body: JSON.stringify(body)
-        });
-
-        if(response.ok) {
-            Alert.alert("¡Pago Exitoso!", "Tu reserva ha sido pagada.");
-            await refreshUser(); 
-            navigation.goBack();
-        } else {
-            const err = await response.json();
-            Alert.alert("Error", err.message || "Fallo al pagar");
-        }
+        const response = await fetch(`${API_URL}/payments/pay-reservation/${res.id}`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(body) });
+        if(response.ok) { Alert.alert("¡Pago Exitoso!", "Tu reserva ha sido pagada."); await refreshUser(); navigation.goBack(); } else { const err = await response.json(); Alert.alert("Error", err.message || "Fallo al pagar"); }
     } catch(e) { Alert.alert("Error", "Error de conexión"); }
   };
-
-  const verifyYape = () => {
-      if (yapeCode !== '00000') {
-          return Alert.alert("Error de Pago", "El código de operación es inválido (Usa '00000' para probar).");
-      }
-      handlePayment('yape', yapeCode);
-  };
-
+  const verifyYape = () => { if (yapeCode !== '00000') { return Alert.alert("Error de Pago", "El código de operación es inválido (Usa '00000' para probar)."); } handlePayment('yape', yapeCode); };
   const openGPS = () => {
       const scheme = Platform.select({ ios: 'maps:0,0?q=', android: 'geo:0,0?q=' });
       const latLng = `${lat},${lng}`;
       const url = Platform.select({ ios: `${scheme}${parkingName}@${latLng}`, android: `${scheme}${latLng}(${parkingName})` });
       Linking.openURL(url);
   };
-
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.bgDark }}>
         <MapView style={{ flex: 1 }} initialRegion={{ latitude: lat || -16.4, longitude: lng || -71.5, latitudeDelta: 0.015, longitudeDelta: 0.015 }} customMapStyle={MAP_STYLE}>
@@ -625,11 +821,7 @@ function PagoQRScreen({ route, navigation }) {
                     <Button text="PAGAR CON SALDO" onPress={() => handlePayment('saldo')} style={{marginBottom: 10}} />
                     <Button text="PAGAR CON YAPE" variant="outline" onPress={() => setShowYapeModal(true)} />
                 </>
-            ) : (
-                <View style={{flexDirection:'row', justifyContent:'center', backgroundColor: 'rgba(16, 185, 129, 0.2)', padding: 10, borderRadius: 10}}>
-                    <Text style={{color: COLORS.success, fontWeight:'bold'}}>PAGADO ✓ - PUEDES INGRESAR</Text>
-                </View>
-            )}
+            ) : ( <View style={{flexDirection:'row', justifyContent:'center', backgroundColor: 'rgba(16, 185, 129, 0.2)', padding: 10, borderRadius: 10}}><Text style={{color: COLORS.success, fontWeight:'bold'}}>PAGADO ✓ - PUEDES INGRESAR</Text></View> )}
             <Button text="VOLVER" variant="outline" onPress={() => navigation.goBack()} style={{ marginTop: 10 }} />
         </View>
         <Modal animationType="slide" transparent={true} visible={showYapeModal} onRequestClose={() => setShowYapeModal(false)}>
@@ -652,16 +844,13 @@ function ProfileScreen({ navigation }) {
   const [modalRecharge, setModalRecharge] = useState(false);
   const [rechargeAmount, setRechargeAmount] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
-  
   const [modalEdit, setModalEdit] = useState(false);
   const [editName, setEditName] = useState('');
   const [editEmail, setEditEmail] = useState('');
   const [editDni, setEditDni] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [editPlate, setEditPlate] = useState('');
-
   useFocusEffect(useCallback(() => { refreshUser(); }, []));
-
   const openEditModal = () => {
       setEditName(user.name || '');
       setEditEmail(user.email || '');
@@ -670,48 +859,24 @@ function ProfileScreen({ navigation }) {
       setEditPlate(user.plate || '');
       setModalEdit(true);
   };
-
   const handleRechargeSubmit = async () => {
       if(verificationCode !== '00000') return Alert.alert("Error", "Código de validación incorrecto.");
       const amount = parseFloat(rechargeAmount);
       if(isNaN(amount) || amount <= 0) return Alert.alert("Error", "Monto inválido");
-      
       try {
           const newBalance = parseFloat(user.balance) + amount;
-          const res = await fetch(`${API_URL}/users/${user.id}`, {
-              method: 'PUT',
-              headers: getHeaders(),
-              body: JSON.stringify({ balance: newBalance })
-          });
-          if(res.ok) {
-              await refreshUser();
-              setModalRecharge(false);
-              setRechargeAmount('');
-              setVerificationCode('');
-              Alert.alert("¡Recarga Exitosa!", `Saldo actual: S/ ${newBalance.toFixed(2)}`);
-          }
+          const res = await fetch(`${API_URL}/users/${user.id}`, { method: 'PUT', headers: getHeaders(), body: JSON.stringify({ balance: newBalance }) });
+          if(res.ok) { await refreshUser(); setModalRecharge(false); setRechargeAmount(''); setVerificationCode(''); Alert.alert("¡Recarga Exitosa!", `Saldo actual: S/ ${newBalance.toFixed(2)}`); }
       } catch(e) { Alert.alert("Error", "Fallo al recargar"); }
   };
-
   const handleSaveProfile = async () => {
       if(!editName.trim()) return Alert.alert("Error", "Nombre obligatorio");
       try {
-          const res = await fetch(`${API_URL}/users/${user.id}`, {
-              method: 'PUT',
-              headers: getHeaders(),
-              body: JSON.stringify({ name: editName, email: editEmail, dni: editDni, phone: editPhone, plate: editPlate })
-          });
-          if(res.ok) {
-              await refreshUser();
-              setModalEdit(false);
-              Alert.alert("Actualizado", "Datos guardados.");
-          }
+          const res = await fetch(`${API_URL}/users/${user.id}`, { method: 'PUT', headers: getHeaders(), body: JSON.stringify({ name: editName, email: editEmail, dni: editDni, phone: editPhone, plate: editPlate }) });
+          if(res.ok) { await refreshUser(); setModalEdit(false); Alert.alert("Actualizado", "Datos guardados."); }
       } catch(e) { Alert.alert("Error", "Fallo al guardar"); }
   }
-
-  const handleLogout = () => {
-    Alert.alert("Cerrar Sesión", "¿Seguro?", [{ text: "Cancelar", style: "cancel" }, { text: "Salir", style: "destructive", onPress: () => { logout(); navigation.replace('Login'); } }]);
-  }
+  const handleLogout = () => { Alert.alert("Cerrar Sesión", "¿Seguro?", [{ text: "Cancelar", style: "cancel" }, { text: "Salir", style: "destructive", onPress: () => { logout(); navigation.replace('Login'); } }]); }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -719,31 +884,20 @@ function ProfileScreen({ navigation }) {
         <Text style={styles.headerTitle}>Mi Perfil</Text>
         <View style={{ alignItems: 'center', marginBottom: 30 }}>
           <Image source={user?.gender === 'woman' ? IMAGES.avatar_woman : IMAGES.avatar_man} style={{ width: 100, height: 100, borderRadius: 50, borderWidth: 3, borderColor: COLORS.primary }} />
-          <TouchableOpacity onPress={openEditModal} style={{flexDirection: 'row', alignItems: 'center', marginTop: 15}}>
-             <Text style={{ color: COLORS.textWhite, fontSize: 24, fontWeight: 'bold', marginRight: 8 }}>{user?.name}</Text>
-             <Edit size={18} color={COLORS.primary} />
-          </TouchableOpacity>
+          <TouchableOpacity onPress={openEditModal} style={{flexDirection: 'row', alignItems: 'center', marginTop: 15}}><Text style={{ color: COLORS.textWhite, fontSize: 24, fontWeight: 'bold', marginRight: 8 }}>{user?.name}</Text><Edit size={18} color={COLORS.primary} /></TouchableOpacity>
           <Text style={{ color: COLORS.textGray }}>{user?.email}</Text>
         </View>
-
         <Card style={{ marginBottom: 20, backgroundColor: COLORS.primary }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <View>
-              <Text style={{ color: 'rgba(255,255,255,0.7)', fontWeight: 'bold' }}>SALDO DISPONIBLE</Text>
-              <Text style={{ color: 'white', fontSize: 32, fontWeight: 'bold' }}>S/ {user?.balance ? parseFloat(user.balance).toFixed(2) : '0.00'}</Text>
-            </View>
-            <TouchableOpacity onPress={() => setModalRecharge(true)} style={{ backgroundColor: 'white', padding: 10, borderRadius: 50 }}>
-              <Zap size={24} color={COLORS.primary} fill={COLORS.primary} />
-            </TouchableOpacity>
+            <View><Text style={{ color: 'rgba(255,255,255,0.7)', fontWeight: 'bold' }}>SALDO DISPONIBLE</Text><Text style={{ color: 'white', fontSize: 32, fontWeight: 'bold' }}>S/ {user?.balance ? parseFloat(user.balance).toFixed(2) : '0.00'}</Text></View>
+            <TouchableOpacity onPress={() => setModalRecharge(true)} style={{ backgroundColor: 'white', padding: 10, borderRadius: 50 }}><Zap size={24} color={COLORS.primary} fill={COLORS.primary} /></TouchableOpacity>
           </View>
         </Card>
-
         <Card>
           <TouchableOpacity style={styles.profileRow} onPress={openEditModal}><User size={20} color={COLORS.textGray} /><Text style={styles.profileRowText}>Datos Personales</Text><ChevronRight size={20} color={COLORS.textGray} /></TouchableOpacity>
           <View style={styles.divider} />
           <TouchableOpacity style={styles.profileRow} onPress={() => Linking.openURL('tel:+51999999999')}><Phone size={20} color={COLORS.textGray} /><Text style={styles.profileRowText}>Ayuda y Soporte</Text><ChevronRight size={20} color={COLORS.textGray} /></TouchableOpacity>
         </Card>
-
         <Button text="CERRAR SESIÓN" onPress={handleLogout} variant="danger" style={{ marginTop: 30 }} icon={<LogOut size={20} color="white" />} />
         
         <Modal animationType="slide" transparent={true} visible={modalRecharge} onRequestClose={() => setModalRecharge(false)}>
@@ -753,8 +907,8 @@ function ProfileScreen({ navigation }) {
                     <Text style={styles.modalTitle}>Recargar Saldo</Text>
                     <Text style={styles.label}>Monto (S/)</Text>
                     <TextInput style={styles.modalInput} placeholder="Monto (S/)" placeholderTextColor="#666" keyboardType="numeric" value={rechargeAmount} onChangeText={setRechargeAmount} />
-                    <Text style={styles.label}>Código de Validación (Dev)</Text>
-                    <TextInput style={styles.modalInput} placeholder="Usa: 00000" placeholderTextColor="#666" secureTextEntry value={verificationCode} onChangeText={setVerificationCode} />
+                    <Text style={styles.label}>Código de Validación</Text>
+                    <TextInput style={styles.modalInput} placeholder="Código secreto" placeholderTextColor="#666" secureTextEntry value={verificationCode} onChangeText={setVerificationCode} />
                     <Button text="Recargar Ahora" onPress={handleRechargeSubmit} />
                 </View>
             </View>
@@ -786,77 +940,40 @@ function ProfileScreen({ navigation }) {
 function HomeScreen({ navigation }) {
   const { user, refreshUser } = useAuth();
   const [parkings, setParkings] = useState([]);
-
-  // FORZAR ACTUALIZACIÓN DE SALDO AL ENTRAR AL HOME
-  useFocusEffect(useCallback(() => {
-      refreshUser();
-      fetch(`${API_URL}/parkings/`).then(r=>r.json()).then(data=>setParkings(data)).catch(e=>console.error(e));
-  }, []));
-
+  useFocusEffect(useCallback(() => { refreshUser(); fetch(`${API_URL}/parkings/`).then(r=>r.json()).then(data=>setParkings(data)).catch(e=>console.error(e)); }, []));
   const handleRegisterGarage = () => { Alert.alert("Registra tu Cochera", "Contáctanos:\n📞 +51 987 654 321", [{ text: "Llamar", onPress: () => Linking.openURL('tel:987654321') }, { text: "Cerrar" }]); }
-
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.container}>
         <View style={{ padding: 24, paddingTop: 60 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-            <View>
-              <Text style={{ fontSize: 16, color: COLORS.textGray }}>Hola, {user?.name?.split(' ')[0]}</Text>
-              <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                  <Text style={{ fontSize: 24, fontWeight: 'bold', color: COLORS.textWhite, marginRight: 8 }}>S/ {user?.balance ? parseFloat(user.balance).toFixed(2) : '0.00'}</Text>
-                  <View style={{backgroundColor: 'rgba(16, 185, 129, 0.2)', paddingHorizontal: 6, borderRadius: 4}}>
-                      <Text style={{color: COLORS.success, fontSize: 10, fontWeight:'bold'}}>SALDO</Text>
-                  </View>
-              </View>
-            </View>
-            <TouchableOpacity onPress={() => navigation.navigate('ProfileTab')}>
-              <Image source={user?.gender === 'woman' ? IMAGES.avatar_woman : IMAGES.avatar_man} style={{ width: 50, height: 50, borderRadius: 25, borderWidth: 1, borderColor: COLORS.primary }} />
-            </TouchableOpacity>
+            <View><Text style={{ fontSize: 16, color: COLORS.textGray }}>Hola, {user?.name?.split(' ')[0]}</Text><View style={{flexDirection: 'row', alignItems: 'center'}}><Text style={{ fontSize: 24, fontWeight: 'bold', color: COLORS.textWhite, marginRight: 8 }}>S/ {user?.balance ? parseFloat(user.balance).toFixed(2) : '0.00'}</Text><View style={{backgroundColor: 'rgba(16, 185, 129, 0.2)', paddingHorizontal: 6, borderRadius: 4}}><Text style={{color: COLORS.success, fontSize: 10, fontWeight:'bold'}}>SALDO</Text></View></View></View>
+            <TouchableOpacity onPress={() => navigation.navigate('ProfileTab')}><Image source={user?.gender === 'woman' ? IMAGES.avatar_woman : IMAGES.avatar_man} style={{ width: 50, height: 50, borderRadius: 25, borderWidth: 1, borderColor: COLORS.primary }} /></TouchableOpacity>
           </View>
-
           <View style={styles.banner}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.bannerTitle}>Tu cochera ideal</Text>
-              <Text style={{ color: '#cbd5e1', marginBottom: 15 }}>Reserva segura en todo Arequipa.</Text>
-              <TouchableOpacity onPress={() => navigation.navigate('MapaTab')} style={styles.bannerBtn}>
-                <Text style={{ color: COLORS.primary, fontWeight: 'bold' }}>VER MAPA</Text>
-              </TouchableOpacity>
-            </View>
+            <View style={{ flex: 1 }}><Text style={styles.bannerTitle}>Tu cochera ideal</Text><Text style={{ color: '#cbd5e1', marginBottom: 15 }}>Reserva segura en todo Arequipa.</Text><TouchableOpacity onPress={() => navigation.navigate('MapaTab')} style={styles.bannerBtn}><Text style={{ color: COLORS.primary, fontWeight: 'bold' }}>VER MAPA</Text></TouchableOpacity></View>
             <MapIcon size={80} color="rgba(255,255,255,0.2)" style={{ position: 'absolute', right: -10, bottom: -10 }} />
           </View>
-
           <Text style={styles.sectionTitle}>Cocheras Disponibles</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 20}}>
               {parkings.slice(0, 5).map(park => (
                   <TouchableOpacity key={park.id} style={{marginRight: 15, width: 140}} onPress={() => navigation.navigate('MapaTab', { parkingId: park.id })}>
-                      <Image source={park.image_url ? {uri: park.image_url} : IMAGES.parking1} style={{width: 140, height: 90, borderRadius: 12}} />
+                      {/* ✅ IMAGEN DINÁMICA AQUI */}
+                      <Image source={getParkingImage(park)} style={{width: 140, height: 90, borderRadius: 12}} />
                       <Text style={{color: 'white', fontWeight: 'bold', marginTop: 5}} numberOfLines={1}>{park.name}</Text>
                       <Text style={{color: COLORS.textGray, fontSize: 12}}>{park.district}</Text>
                   </TouchableOpacity>
               ))}
           </ScrollView>
-
           <Text style={styles.sectionTitle}>Opciones</Text>
           <View style={{ gap: 15 }}>
             <View style={{ flexDirection: 'row', gap: 15 }}>
-                <TouchableOpacity onPress={() => navigation.navigate('Manual')} style={styles.shortcut}>
-                <View style={[styles.iconBox, { backgroundColor: 'rgba(245, 158, 11, 0.1)' }]}><BookOpen color={COLORS.warning} size={28} /></View>
-                <Text style={styles.shortcutText}>Guía de Uso</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => navigation.navigate('PanelTab')} style={styles.shortcut}>
-                <View style={[styles.iconBox, { backgroundColor: 'rgba(16, 185, 129, 0.1)' }]}><QrCode color={COLORS.success} size={28} /></View>
-                <Text style={styles.shortcutText}>Mis Reservas</Text>
-                </TouchableOpacity>
+                <TouchableOpacity onPress={() => navigation.navigate('Manual')} style={styles.shortcut}><View style={[styles.iconBox, { backgroundColor: 'rgba(245, 158, 11, 0.1)' }]}><BookOpen color={COLORS.warning} size={28} /></View><Text style={styles.shortcutText}>Guía de Uso</Text></TouchableOpacity>
+                <TouchableOpacity onPress={() => navigation.navigate('PanelTab')} style={styles.shortcut}><View style={[styles.iconBox, { backgroundColor: 'rgba(16, 185, 129, 0.1)' }]}><QrCode color={COLORS.success} size={28} /></View><Text style={styles.shortcutText}>Mis Reservas</Text></TouchableOpacity>
             </View>
             <TouchableOpacity onPress={handleRegisterGarage} style={[styles.card, {flexDirection: 'row', alignItems: 'center', padding: 15}]}>
-                <View style={[styles.iconBox, {backgroundColor: 'rgba(59, 130, 246, 0.1)'}]}>
-                    <Briefcase color={COLORS.primary} size={24}/>
-                </View>
-                <View style={{marginLeft: 15, flex: 1}}>
-                    <Text style={{color: 'white', fontWeight: 'bold', fontSize: 16}}>¿Tienes una cochera?</Text>
-                    <Text style={{color: COLORS.textGray, fontSize: 12}}>Regístrate y empieza a ganar dinero</Text>
-                </View>
-                <ChevronRight color={COLORS.textGray}/>
+                <View style={[styles.iconBox, {backgroundColor: 'rgba(59, 130, 246, 0.1)'}]}><Briefcase color={COLORS.primary} size={24}/></View>
+                <View style={{marginLeft: 15, flex: 1}}><Text style={{color: 'white', fontWeight: 'bold', fontSize: 16}}>¿Tienes una cochera?</Text><Text style={{color: COLORS.textGray, fontSize: 12}}>Regístrate y empieza a ganar dinero</Text></View><ChevronRight color={COLORS.textGray}/>
             </TouchableOpacity>
           </View>
         </View>
@@ -868,15 +985,9 @@ function HomeScreen({ navigation }) {
 function ManualScreen() {
   const renderPaso = (icon, title, steps) => (
     <Card style={{ marginBottom: 15 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 15 }}>
-        <View style={{ backgroundColor: COLORS.inputBg, padding: 10, borderRadius: 10 }}>{icon}</View>
-        <Text style={[styles.cardTitle, { marginLeft: 15 }]}>{title}</Text>
-      </View>
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 15 }}><View style={{ backgroundColor: COLORS.inputBg, padding: 10, borderRadius: 10 }}>{icon}</View><Text style={[styles.cardTitle, { marginLeft: 15 }]}>{title}</Text></View>
       {steps.map((text, index) => (
-        <View key={index} style={{ flexDirection: 'row', marginBottom: 8 }}>
-          <Text style={{ color: COLORS.primary, fontWeight: 'bold', marginRight: 10 }}>{index + 1}.</Text>
-          <Text style={{ color: COLORS.textGray, flex: 1, lineHeight: 20 }}>{text}</Text>
-        </View>
+        <View key={index} style={{ flexDirection: 'row', marginBottom: 8 }}><Text style={{ color: COLORS.primary, fontWeight: 'bold', marginRight: 10 }}>{index + 1}.</Text><Text style={{ color: COLORS.textGray, flex: 1, lineHeight: 20 }}>{text}</Text></View>
       ))}
     </Card>
   );
@@ -896,14 +1007,9 @@ const Stack = createNativeStackNavigator();
 
 function MainTabs() {
   return (
-    <Tab.Navigator 
-      screenOptions={{ 
-        headerShown: false, tabBarShowLabel: false, tabBarActiveTintColor: COLORS.primary, tabBarInactiveTintColor: COLORS.textGray, 
-        tabBarStyle: { backgroundColor: COLORS.bgDark, borderTopWidth: 0, elevation: 0, height: 90, paddingBottom: 20, paddingTop: 10 } 
-      }}
-    >
+    <Tab.Navigator screenOptions={{ headerShown: false, tabBarShowLabel: false, tabBarActiveTintColor: COLORS.primary, tabBarInactiveTintColor: COLORS.textGray, tabBarStyle: { backgroundColor: COLORS.bgDark, borderTopWidth: 0, elevation: 0, height: 90, paddingBottom: 20, paddingTop: 10 } }}>
       <Tab.Screen name="InicioTab" component={HomeScreen} options={{ tabBarIcon: ({ color }) => <Home color={color} /> }} />
-      <Tab.Screen name="MapaTab" component={MapScreen} options={{ tabBarIcon: ({ color }) => <MapIcon color={color} /> }} />
+      <Tab.Screen name="MapaTab" component={MapScreen} options={{ tabBarIcon: ({ color }) => <NavigationIcon color={color} /> }} />
       <Tab.Screen name="PanelTab" component={DashboardScreen} options={{ tabBarIcon: ({ color }) => <View style={{ backgroundColor: COLORS.primary, padding: 12, borderRadius: 30, marginTop: -20, elevation: 5 }}><QrCode color="white" /></View> }} />
       <Tab.Screen name="ProfileTab" component={ProfileScreen} options={{ tabBarIcon: ({ color }) => <User color={color} /> }} />
     </Tab.Navigator>
@@ -911,14 +1017,8 @@ function MainTabs() {
 }
 
 export default function App() {
-  // CONFIGURACIÓN CORRECTA DE PANTALLA DE CARGA
-  // Muestra el Splash personalizado y oculta el nativo cuando el componente monta
   const [showSplash, setShowSplash] = useState(true);
-
-  if (showSplash) {
-    return <CustomSplashScreen onFinish={() => setShowSplash(false)} />;
-  }
-
+  if (showSplash) { return <CustomSplashScreen onFinish={() => setShowSplash(false)} />; }
   return (
     <SafeAreaProvider>
       <AuthProvider>

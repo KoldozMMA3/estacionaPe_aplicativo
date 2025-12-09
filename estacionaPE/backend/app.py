@@ -1,6 +1,7 @@
 from flask import Flask
 from flask_smorest import Api
 from flask_jwt_extended import JWTManager
+from flask_migrate import Migrate  # <--- ESTO ERA LO QUE FALTABA
 from db import db
 import config
 
@@ -12,6 +13,7 @@ from routes.reservations import blp as ReservationsBLP
 from routes.payments import blp as PaymentsBLP      
 from routes.promotions import blp as PromotionsBLP  
 from routes.reports import blp as ReportsBLP
+from oauth_client import register_oauth
 
 def create_app():
     app = Flask(__name__)
@@ -27,7 +29,14 @@ def create_app():
     app.config["OPENAPI_VERSION"] = config.OPENAPI_VERSION
 
     db.init_app(app)
+    
+    # Inicializar Migrate correctamente ahora que está importado
+    migrate = Migrate(app, db)
+    
     JWTManager(app)
+
+    # Inicializar OAuth (SSO)
+    register_oauth(app)
     
     api = Api(app)
     
