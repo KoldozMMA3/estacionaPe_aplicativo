@@ -1,3 +1,9 @@
+/**
+ * =======================================================================================
+ * ARCHIVO PRINCIPAL DE LA APLICACIÓN (App.js) - FINAL Y ESTABLE
+ * =======================================================================================
+ */
+
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { NavigationContainer, useFocusEffect, useNavigation } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -6,8 +12,9 @@ import * as SplashScreen from 'expo-splash-screen';
 import {
   AlertCircle,
   BookOpen, Briefcase, Car, ChevronRight, Clock,
-  CreditCard, Edit, Heart, Home, Lock, LogOut, Mail, Map as MapIcon,
-  Navigation, Phone, QrCode, Search,
+  CreditCard, Edit, Heart, Home, Lock, LogOut, Mail, 
+  Map as MapIcon, Navigation as NavigationIcon, // Usamos este alias para evitar confusiones
+  Phone, QrCode, Search,Navigation,
   Star, User, X, Zap
 } from 'lucide-react-native';
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
@@ -24,86 +31,84 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 const { width, height } = Dimensions.get('window');
 
-// --------------------------------------------------------------------------------
-// ✅ CONFIGURACIÓN IP (Actualizada con tu ipconfig)
-// --------------------------------------------------------------------------------
-const API_URL = 'http://192.168.100.14:5000/api'; 
+// =======================================================================================
+// 1. CONFIGURACIÓN DE CONEXIÓN
+// =======================================================================================
+const API_URL = 'http://172.19.224.140:5000/api';
 
 SplashScreen.preventAutoHideAsync();
 
-// --- COLORES ---
+// =======================================================================================
+// 2. ESTILOS Y RECURSOS
+// =======================================================================================
 const COLORS = {
-  bgDark: '#0f172a', cardDark: '#1e293b', primary: '#3b82f6', primaryHover: '#2563eb',
-  textWhite: '#f1f5f9', textGray: '#94a3b8', success: '#10b981', danger: '#ef4444',
-  warning: '#f59e0b', info: '#0ea5e9', inputBg: '#334155',
+  bgDark: '#0B0C15',       
+  cardDark: '#151725',     
+  primary: '#6366F1',      
+  primaryHover: '#4F46E5', 
+  textWhite: '#E2E8F0',    
+  textGray: '#94A3B8',
+  success: '#10B981',      
+  danger: '#EF4444',       
+  warning: '#F59E0B',
+  info: '#3B82F6',
+  inputBg: '#1F2235',      
+  border: '#2D324D'        
 };
 
-// --- IMÁGENES ---
 const IMAGES = {
   splash1: { uri: 'https://images.unsplash.com/photo-1621929747188-b244589bc9c2?w=800&q=80' }, 
   splash2: { uri: 'https://images.unsplash.com/photo-1506521781263-d8422e82f27a?w=800&q=80' },
   splash3: { uri: 'https://images.unsplash.com/photo-1485291571150-772bcfc10da5?w=800&q=80' },
-  logo: { uri: 'https://cdn-icons-png.flaticon.com/512/2330/2330453.png' }, 
+  logo: require('./assets/images/3a.png'), 
   avatar_man: { uri: 'https://cdn-icons-png.flaticon.com/512/4140/4140048.png' },
   avatar_woman: { uri: 'https://cdn-icons-png.flaticon.com/512/4140/4140047.png' },
-  // Mantenemos estas como fallback, pero usaremos las dinámicas abajo
-  parking1: { uri: 'https://images.unsplash.com/photo-1590674899484-d5640e854abe?w=800&q=80' },
-  parking2: { uri: 'https://images.unsplash.com/photo-1470224114660-3f6686c562eb?w=800&q=80' },
+  parking1: { uri: 'https://images.unsplash.com/photo-1590674899484-d5640e854abe?w=800&q=80' }, 
 };
 
-// --------------------------------------------------------------------------------
-// ✅ NUEVA LÓGICA DE IMÁGENES (Punto 1 Solicitado)
-// --------------------------------------------------------------------------------
-const PARKING_URLS = [
-    'https://images.unsplash.com/photo-1506521781263-d8422e82f27a?w=800&q=80', // Parking Tech
-    'https://images.unsplash.com/photo-1570129477492-45f043ddc71a?w=800&q=80', // Edificio moderno
-    'https://images.unsplash.com/photo-1470224114660-3f6686c562eb?w=800&q=80', // Subterráneo
-    'https://images.unsplash.com/photo-1590674899484-d5640e854abe?w=800&q=80', // Concreto
-    'https://images.unsplash.com/photo-1621929747188-b244589bc9c2?w=800&q=80', // Estilo abierto
+// Imágenes de cocheras
+const ONLINE_PARKING_IMAGES = [
+  'https://images.unsplash.com/photo-1506521781263-d8422e82f27a?auto=format&fit=crop&w=500&q=60',
+  'https://images.unsplash.com/photo-1470224114660-3f6686c562eb?auto=format&fit=crop&w=500&q=60',
+  'https://images.unsplash.com/photo-1570129477492-45f043ddc71a?auto=format&fit=crop&w=500&q=60',
+  'https://images.unsplash.com/photo-1590674899484-d5640e854abe?auto=format&fit=crop&w=500&q=60',
+  'https://images.unsplash.com/photo-1621929747188-b244589bc9c2?auto=format&fit=crop&w=500&q=60',
+  'https://images.unsplash.com/photo-1583590035058-299d9b0488d5?auto=format&fit=crop&w=500&q=60',
+  'https://images.unsplash.com/photo-1555652548-75a74e304894?auto=format&fit=crop&w=500&q=60',
 ];
 
 const getParkingImage = (parking) => {
-    if (parking?.image_url) return { uri: parking.image_url };
-    // Asignación determinista basada en el ID para que siempre salga la misma foto para la misma cochera
-    const index = (parking?.id || 0) % PARKING_URLS.length;
-    return { uri: PARKING_URLS[index] };
+    if (!parking) return { uri: ONLINE_PARKING_IMAGES[0] };
+    if (parking.image_url) return { uri: parking.image_url };
+    const id = parking.id || 0;
+    const index = id % ONLINE_PARKING_IMAGES.length;
+    return { uri: ONLINE_PARKING_IMAGES[index] };
 };
 
-// --------------------------------------------------------------------------------
-// ✅ FUNCIONES DE TIEMPO FIJO (Puntos 2 y 3 Solicitados)
-// --------------------------------------------------------------------------------
-
-// Muestra la hora EXACTA que viene de la BD cortando el string. 
-// No usa new Date() para renderizar texto, evitando cambios si mueves la hora del celular.
+// --- UTILS: TIEMPO ---
 const formatStaticTime = (isoString) => {
     if (!isoString || typeof isoString !== 'string') return "--:--";
     try {
-        // Asumiendo formato ISO del backend: "2025-12-06T07:30:00..."
-        // Tomamos exactamente lo que viene después de la T
         const timePart = isoString.split('T')[1]; 
         if (!timePart) return "--:--";
-        
-        // Cortamos hh:mm
         const [hRaw, mRaw] = timePart.split(':');
         let h = parseInt(hRaw, 10);
         const m = mRaw;
-        
-        // Convertimos a 12h solo para visualización, sin cambiar el valor base
         const ampm = h >= 12 ? 'PM' : 'AM';
         h = h % 12 || 12; 
-        
         return `${h}:${m} ${ampm}`;
     } catch (e) { return "--:--"; }
 };
 
-// Genera un string ISO LOCAL exacto para guardar lo que el usuario seleccionó.
 const getLocalISOString = (date) => {
     const offset = date.getTimezoneOffset() * 60000;
     const localDate = new Date(date.getTime() - offset);
     return localDate.toISOString().slice(0, -1); 
 };
 
-// --- CONTEXTO AUTH ---
+// =======================================================================================
+// 4. GESTIÓN DE ESTADO GLOBAL (AUTH CONTEXT)
+// =======================================================================================
 const AuthContext = createContext(null);
 
 function AuthProvider({ children }) {
@@ -116,23 +121,34 @@ function AuthProvider({ children }) {
   const login = async (email, password) => {
     try {
       setIsLoading(true);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); 
+
       const response = await fetch(`${API_URL}/auth/login`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ email, password }),
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
+
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Error al iniciar sesión');
+      
       setToken(data.access_token);
       const userData = { ...data.user, balance: parseFloat(data.user.balance) };
       setUser(userData); 
       return true;
     } catch (error) { 
-        Alert.alert("Error de Conexión", error.message); 
+        let msg = error.message;
+        if (error.name === 'AbortError') msg = "El servidor está tardando en responder.";
+        Alert.alert("Error de Conexión", msg); 
         return false; 
     } 
     finally { setIsLoading(false); }
   };
+  
   const logout = () => { setUser(null); setToken(null); };
+  
   const refreshUser = async () => {
     if (!user || !token) return;
     try {
@@ -143,6 +159,36 @@ function AuthProvider({ children }) {
       }
     } catch(e) { console.log(e); }
   }
+  
+  const loginWithToken = async (manualToken) => {
+      try {
+          setIsLoading(true);
+          const base64Url = manualToken.split('.')[1];
+          const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+          const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+              return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+          }).join(''));
+          const decoded = JSON.parse(jsonPayload);
+          
+          const userId = decoded.sub || decoded.identity; 
+
+          setToken(manualToken);
+          const response = await fetch(`${API_URL}/users/${userId}`, { 
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${manualToken}` } 
+          });
+          
+          if(response.ok) {
+              const u = await response.json();
+              setUser({ ...u, balance: parseFloat(u.balance) });
+              return true;
+          }
+          return false;
+      } catch (e) {
+          Alert.alert("Token Inválido", "El token ingresado no es válido.");
+          return false;
+      } finally { setIsLoading(false); }
+  };
+
   const registerUser = async (userData) => {
     try {
         setIsLoading(true);
@@ -157,19 +203,48 @@ function AuthProvider({ children }) {
     } catch (e) { Alert.alert("Error", e.message); return false; } 
     finally { setIsLoading(false); }
   }
+
+  useEffect(() => {
+    const handleDeepLink = (event) => {
+      const { url } = event;
+      if (url && url.includes('token=')) {
+        const params = {};
+        const regex = /[?&]([^=#]+)=([^&#]*)/g;
+        let match;
+        while ((match = regex.exec(url))) {
+          params[match[1]] = decodeURIComponent(match[2]);
+        }
+        if (params.token) loginWithToken(params.token); 
+      }
+    };
+    const subscription = Linking.addEventListener('url', handleDeepLink);
+    Linking.getInitialURL().then((url) => { if (url) handleDeepLink({ url }); });
+    return () => subscription.remove();
+  }, []);
+  
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, refreshUser, registerUser, isLoading, getHeaders }}>
+    <AuthContext.Provider value={{ user, token, login, loginWithToken, logout, refreshUser, registerUser, isLoading, getHeaders }}>
       {children}
     </AuthContext.Provider>
   );
 }
 const useAuth = () => useContext(AuthContext);
 
-// --- COMPONENTES UI ---
+// =======================================================================================
+// 5. COMPONENTES VISUALES
+// =======================================================================================
+
 const Button = ({ text, onPress, icon, variant = 'primary', disabled = false, style, textStyle }) => {
-  const bg = disabled ? '#334155' : (variant === 'primary' ? COLORS.primary : variant === 'danger' ? COLORS.danger : 'transparent');
-  const textColor = disabled ? '#94a3b8' : COLORS.textWhite;
-  const border = variant === 'outline' ? { borderWidth: 1, borderColor: COLORS.primary } : {};
+  let bg = variant === 'primary' ? COLORS.primary : 'transparent';
+  let textColor = COLORS.textWhite;
+  let border = {};
+
+  if (variant === 'danger') bg = COLORS.danger;
+  if (variant === 'outline') { bg = 'transparent'; border = { borderWidth: 1, borderColor: COLORS.primary }; }
+  if (variant === 'google') { bg = '#DB4437'; } 
+  if (variant === 'microsoft') { bg = '#2F2F2F'; border = { borderWidth: 1, borderColor: '#555' }; } 
+  if (disabled) { bg = '#334155'; textColor = '#94a3b8'; }
+
   return (
     <TouchableOpacity onPress={disabled ? null : onPress} style={[styles.btn, { backgroundColor: bg }, border, style]} activeOpacity={0.8}>
       {icon && <View style={{ marginRight: 8 }}>{icon}</View>}
@@ -187,6 +262,7 @@ const Input = ({ label, value, onChangeText, placeholder, secure, icon, keyboard
     </View>
   </View>
 );
+
 const Card = ({ children, style }) => (<View style={[styles.card, style]}>{children}</View>);
 const Badge = ({ text, color, bg }) => (<View style={[styles.badge, { backgroundColor: bg || '#334155' }]}><Text style={[styles.badgeText, { color: color || COLORS.textWhite }]}>{text}</Text></View>);
 
@@ -219,16 +295,38 @@ function CustomSplashScreen({ onFinish }) {
   );
 }
 
-// --- PANTALLAS ---
+// =======================================================================================
+// 6. PANTALLAS
+// =======================================================================================
+
 function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const { login, isLoading } = useAuth();
+  
+  const [manualToken, setManualToken] = useState('');
+  const [showManual, setShowManual] = useState(false);
+
+  const { login, loginWithToken, isLoading, user } = useAuth();
+
+  useEffect(() => {
+      if (user) {
+          navigation.replace('MainTabs');
+      }
+  }, [user]);
+
   const handleLogin = async () => {
     if(!email || !password) return Alert.alert("Error", "Campos vacíos");
-    const success = await login(email.trim(), password);
-    if (success) navigation.replace('MainTabs');
+    await login(email.trim(), password);
   };
+
+  const handleManualLogin = async () => {
+      if(!manualToken) return;
+      await loginWithToken(manualToken.trim());
+  };
+
+  const handleGoogleLogin = () => { Linking.openURL(`${API_URL}/login/google`); };
+  const handleMicrosoftLogin = () => { Linking.openURL(`${API_URL}/login/microsoft`); };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.bgDark} />
@@ -239,14 +337,55 @@ function LoginScreen({ navigation }) {
         </View>
         <Text style={styles.title}>Bienvenido</Text>
         <Text style={styles.subtitle}>Ingresa a tu cuenta.</Text>
-        <View style={{ width: '100%', marginTop: 40 }}>
+        <ScrollView style={{ width: '100%', marginTop: 30 }} showsVerticalScrollIndicator={false}>
           <Input label="Correo" placeholder="ej. usuario@ep.pe" value={email} onChangeText={setEmail} icon={<Mail size={20} color={COLORS.textGray} />} keyboardType="email-address" />
           <Input label="Contraseña" placeholder="••••••" value={password} onChangeText={setPassword} secure icon={<Lock size={20} color={COLORS.textGray} />} />
-          {isLoading ? <ActivityIndicator color={COLORS.primary} style={{marginTop: 20}} /> : <Button text="INICIAR SESIÓN" onPress={handleLogin} style={{ marginTop: 10 }} /> }
+          
+          {isLoading ? (
+             <View style={{alignItems: 'center', marginTop: 20}}>
+                 <ActivityIndicator color={COLORS.primary} />
+                 <Text style={{color: COLORS.textGray, marginTop: 10, fontSize: 12}}>Conectando...</Text>
+             </View>
+          ) : (
+            <>
+                <Button text="INICIAR SESIÓN" onPress={handleLogin} style={{ marginTop: 10, marginBottom: 15 }} />
+                
+                <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 15}}>
+                    <View style={{flex: 1, height: 1, backgroundColor: COLORS.border}} />
+                    <Text style={{color: COLORS.textGray, marginHorizontal: 10}}>O continúa con</Text>
+                    <View style={{flex: 1, height: 1, backgroundColor: COLORS.border}} />
+                </View>
+                
+                {/* ⚠️ CORREGIDO: USAMOS 'Mail' y 'Lock' que seguro existen */}
+                <Button text="Google" onPress={handleGoogleLogin} variant="google" icon={<Mail size={20} color="white"/>} style={{marginBottom: 10}} />
+                <Button text="Microsoft" onPress={handleMicrosoftLogin} variant="microsoft" icon={<Lock size={20} color="white"/>} />
+
+                <TouchableOpacity onPress={() => setShowManual(!showManual)} style={{alignItems: 'center', marginTop: 20}}>
+                    <Text style={{color: COLORS.textGray, fontSize: 12}}>¿Problemas con el navegador?</Text>
+                    <Text style={{color: COLORS.info, fontSize: 12}}>Usar Token Manual</Text>
+                </TouchableOpacity>
+
+                {showManual && (
+                    <View style={{marginTop: 15, padding: 15, backgroundColor: COLORS.cardDark, borderRadius: 10, borderWidth: 1, borderColor: COLORS.border}}>
+                        <Text style={{color: 'white', marginBottom: 10, fontSize: 12}}>Pega aquí tu Token (JWT):</Text>
+                        <TextInput 
+                            style={{backgroundColor: COLORS.inputBg, color: 'white', padding: 10, borderRadius: 8, height: 60}} 
+                            multiline 
+                            placeholder="eyJhbGciOi..." 
+                            placeholderTextColor="#555"
+                            value={manualToken}
+                            onChangeText={setManualToken}
+                        />
+                        <Button text="Entrar con Token" onPress={handleManualLogin} variant="outline" style={{marginTop: 10}} icon={<Lock size={16} color="white"/>}/>
+                    </View>
+                )}
+            </>
+          )}
+
           <TouchableOpacity onPress={() => navigation.navigate('Register')} style={{ padding: 20, alignItems: 'center' }}>
             <Text style={{ color: COLORS.textGray }}>¿No tienes cuenta? <Text style={{ color: COLORS.primary, fontWeight: 'bold' }}>Regístrate</Text></Text>
           </TouchableOpacity>
-        </View>
+        </ScrollView>
       </View>
     </SafeAreaView>
   );
@@ -369,22 +508,14 @@ function MapScreen({ route }) {
         const h = parseInt(hStr);
         const m = parseInt(mStr);
         
-        // 1. Usar hora del celular (New Date puro)
         const now = new Date();
         let start = new Date();
         start.setHours(h, m, 0, 0);
-
-        // Si la hora ya pasó hoy, asumimos que es para mañana
-        if (start < now) {
-            start.setDate(start.getDate() + 1);
-        }
+        if (start < now) start.setDate(start.getDate() + 1);
 
         let end = new Date(start);
         end.setHours(start.getHours() + dur);
 
-        // 2. IMPORTANTE: Generar el string LOCAL para guardar EXACTAMENTE lo que ve el usuario.
-        // Si usamos .toISOString() directo, se convierte a UTC y cambia la hora.
-        // Usamos la función auxiliar getLocalISOString.
         const startISO = getLocalISOString(start);
         const endISO = getLocalISOString(end);
 
@@ -410,7 +541,6 @@ function MapScreen({ route }) {
             await refreshUser();
         }
         
-        // Usamos la misma función estática para el alert
         Alert.alert("¡Reserva Confirmada!", `Te esperamos a las ${formatStaticTime(startISO)}`);
         setModalVisible(false); setSelected(null); navigation.navigate('PanelTab');
     } catch (error) { Alert.alert("Error de Conexión", error.message); }
@@ -427,7 +557,6 @@ function MapScreen({ route }) {
       if (period === 'AM' && h === 12) h = 0;
       const time24h = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
       
-      // Mostrar confirmación visual simple (solo para el alert, no afecta lógica)
       let displayStart = `${selectedTime} ${period}`;
       const totalCost = (parseFloat(selected.price_per_hour) * dur).toFixed(2);
 
@@ -455,8 +584,15 @@ function MapScreen({ route }) {
       <MapView style={{ flex: 1 }} region={region} showsUserLocation={true} onPress={() => setSelected(null)} userInterfaceStyle="dark" customMapStyle={MAP_STYLE}>
         {filteredParkings.map(p => (
           <Marker key={p.id} coordinate={{ latitude: p.lat, longitude: p.lng }} onPress={(e) => { e.stopPropagation(); setSelected(p); }}>
-            <View style={[styles.marker, { backgroundColor: p.available > 0 ? COLORS.success : COLORS.danger }]}>
-                <Text style={{color: 'white', fontWeight: 'bold', fontSize: 14}}>P</Text>
+            {/* ✅ PUNTOS DE COLOR (SIN IMAGEN) PARA EVITAR LA "L" BLANCA */}
+            <View style={[styles.marker, { 
+                width: 30, height: 30, borderRadius: 15,
+                backgroundColor: 'white',
+                borderWidth: 4,
+                borderColor: p.available > 0 ? COLORS.success : COLORS.danger, 
+                alignItems: 'center', justifyContent: 'center'
+            }]}>
+                <Text style={{color: COLORS.bgDark, fontWeight: 'bold', fontSize: 12}}>P</Text>
             </View>
           </Marker>
         ))}
@@ -466,7 +602,7 @@ function MapScreen({ route }) {
           <TouchableOpacity onPress={() => setSelected(null)} style={{position:'absolute', top: 10, right: 10, zIndex: 10, backgroundColor: 'rgba(0,0,0,0.6)', padding: 5, borderRadius: 20}}>
              <X size={20} color="white"/>
           </TouchableOpacity>
-          {/* ✅ IMAGEN DINÁMICA AQUI */}
+          {/* ✅ IMAGEN DINÁMICA SOLO AQUI EN POPUP */}
           <Image source={getParkingImage(selected)} style={styles.sheetImage} />
           <View style={{ padding: 20 }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 15 }}>
@@ -509,13 +645,7 @@ function MapScreen({ route }) {
 
 const ReservationCard = ({ item, navigation, parkings, refresh }) => {
     const park = parkings.find(p => p.id === item.parking_id);
-    
-    // ✅ 2. USO DE formatStaticTime: 
-    // Visualizamos la hora exactamente como viene del backend sin recalcular.
-    // Al refrescar el componente (vía refresh), se lee el nuevo item.start_time y se renderiza automáticamente.
     const scheduleStr = `${formatStaticTime(item.start_time)} - ${formatStaticTime(item.end_time)}`;
-    
-    // Obtener solo la fecha (YYYY-MM-DD) del string
     const dateStr = item.start_time ? item.start_time.split('T')[0] : "Fecha inválida";
 
     const [timeLeft, setTimeLeft] = useState('');
@@ -527,10 +657,7 @@ const ReservationCard = ({ item, navigation, parkings, refresh }) => {
         Alert.alert("Extender Tiempo", "Se añadirá 1 hora extra por S/ " + (park?.price_per_hour || '5.00'), [
             { text: "Cancelar", style: "cancel" },
             { text: "Confirmar", onPress: async () => { 
-                // Aquí deberías llamar a tu API de extender. 
-                // Por ahora simulamos éxito y refrescamos.
                 Alert.alert("¡Éxito!", "Tiempo extendido 1 hora más."); 
-                // ✅ 3. Al llamar a refresh(), el Dashboard vuelve a pedir datos y se actualizan las horas.
                 if(refresh) refresh(); 
             }}
         ]);
@@ -539,10 +666,7 @@ const ReservationCard = ({ item, navigation, parkings, refresh }) => {
 
     useEffect(() => {
         const interval = setInterval(() => {
-            const nowTimestamp = Date.now(); // Hora del celular (milisegundos) para el contador
-            
-            // Para el contador regresivo, SÍ comparamos contra tiempo real.
-            // Parseamos el string guardado para obtener su equivalente en milisegundos locales.
+            const nowTimestamp = Date.now();
             const startTimestamp = new Date(item.start_time).getTime(); 
             const endTimestamp = new Date(item.end_time).getTime();
             
@@ -573,12 +697,14 @@ const ReservationCard = ({ item, navigation, parkings, refresh }) => {
         return () => clearInterval(interval);
     }, [item, park]);
 
+    const imageSource = item.image_url ? { uri: item.image_url } : getParkingImage(park);
+
     return (
         <TouchableOpacity activeOpacity={0.9} onPress={() => navigation.navigate('PagoQR', { res: item, parkingName: park?.name, lat: park?.lat, lng: park?.lng })}>
             <Card style={{ padding: 0, overflow: 'hidden', marginBottom: 15, borderWidth: isUrgent ? 2 : 0, borderColor: isUrgent ? COLORS.danger : 'transparent' }}>
                 <View style={{ flexDirection: 'row' }}>
-                    {/* ✅ IMAGEN DINÁMICA AQUI */}
-                    <Image source={getParkingImage(park)} style={{ width: 100, height: '100%' }} />
+                    {/* ✅ IMAGEN CONSISTENTE EN MIS RESERVAS */}
+                    <Image source={imageSource} style={{ width: 100, height: '100%' }} />
                     <View style={{ padding: 15, flex: 1 }}>
                         <Text style={styles.cardTitle}>{park?.name || "Cochera"}</Text>
                         <Text style={{ color: COLORS.textGray, fontSize: 12, marginBottom: 4 }}>{dateStr}</Text>
@@ -611,19 +737,36 @@ function DashboardScreen() {
   const navigation = useNavigation();
   const [reservations, setReservations] = useState([]);
   const [parkings, setParkings] = useState([]);
+  
+  // ✅ PERSISTENCIA DE IMAGEN EN FRONTEND
   const fetchData = async () => {
     if(!user) return;
     try {
         const resPark = await fetch(`${API_URL}/parkings/`);
         const parkData = await resPark.json();
         setParkings(parkData);
+        
         const resRes = await fetch(`${API_URL}/reservations/`, { headers: getHeaders() });
         const allReservations = await resRes.json();
+        
         const myReservations = allReservations.filter(r => r.user_id === user.id);
-        setReservations(myReservations.sort((a,b) => new Date(b.created_at) - new Date(a.created_at))); 
+        
+        const enrichedReservations = myReservations
+            .sort((a,b) => new Date(b.created_at) - new Date(a.created_at))
+            .map(r => {
+                const p = parkData.find(pk => pk.id === r.parking_id);
+                return { 
+                    ...r, 
+                    image_url: getParkingImage(p).uri 
+                };
+            });
+
+        setReservations(enrichedReservations); 
     } catch(e) { console.log(e); }
   };
+  
   useFocusEffect(useCallback(() => { fetchData(); }, [user]));
+  
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}><Text style={styles.headerTitle}>Mis Reservas</Text></View>
@@ -866,7 +1009,7 @@ function MainTabs() {
   return (
     <Tab.Navigator screenOptions={{ headerShown: false, tabBarShowLabel: false, tabBarActiveTintColor: COLORS.primary, tabBarInactiveTintColor: COLORS.textGray, tabBarStyle: { backgroundColor: COLORS.bgDark, borderTopWidth: 0, elevation: 0, height: 90, paddingBottom: 20, paddingTop: 10 } }}>
       <Tab.Screen name="InicioTab" component={HomeScreen} options={{ tabBarIcon: ({ color }) => <Home color={color} /> }} />
-      <Tab.Screen name="MapaTab" component={MapScreen} options={{ tabBarIcon: ({ color }) => <MapIcon color={color} /> }} />
+      <Tab.Screen name="MapaTab" component={MapScreen} options={{ tabBarIcon: ({ color }) => <NavigationIcon color={color} /> }} />
       <Tab.Screen name="PanelTab" component={DashboardScreen} options={{ tabBarIcon: ({ color }) => <View style={{ backgroundColor: COLORS.primary, padding: 12, borderRadius: 30, marginTop: -20, elevation: 5 }}><QrCode color="white" /></View> }} />
       <Tab.Screen name="ProfileTab" component={ProfileScreen} options={{ tabBarIcon: ({ color }) => <User color={color} /> }} />
     </Tab.Navigator>
