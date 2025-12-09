@@ -43,8 +43,8 @@ def create_app():
     api.register_blueprint(ReportsBLP)
 
     # Esto asegura que las tablas se creen si no existen al iniciar
-    with app.app_context():
-        db.create_all()
+    #with app.app_context():
+    #    db.create_all()
 
     return app
 

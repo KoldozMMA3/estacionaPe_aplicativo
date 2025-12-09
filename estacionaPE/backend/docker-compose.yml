@@ -1,0 +1,46 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: mysql_db
+    restart: always
+    env_file:
+      - .env
+    environment:
+      # Compose sustituirá estas variables desde el .env
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "3307:3306" # mapea 3306 del container a 3307 del host (evita conflictos locales)
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: estacionape_backend
+    restart: on-failure
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env
+    environment:
+      # Aquí mantenemos DB_HOST y DB_PORT por claridad (pueden provenir del .env también)
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    volumes: []
+    command: >
+      sh -c "gunicorn --workers 4 --bind 0.0.0.0:5000 wsgi:app"
+
+volumes:
+  mysql_data:
