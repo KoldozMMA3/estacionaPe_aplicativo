@@ -9,25 +9,20 @@ pipeline {
     
         stage('Clonar código') {
             steps {
-                git branch: 'main', url: 'https://github.com/KoldozMMA3/estacionaPe_aplicativo'
-            }
-        }
-
-        stage('Construir imagen Docker') {
-            steps {
-                sh 'docker build -t estacionape_backend .'
+                git branch: 'main', url: 'https://github.com/KoldozMMA3/estacionaPe_aplicativo.git'
             }
         }
 
         stage('Detener contenedores anteriores') {
             steps {
-                sh 'docker compose down || true'
+                sh 'docker compose down -v || true'
             }
         }
 
         stage('Levantar servicios') {
             steps {
-                sh 'docker compose up -d --build'
+                sh 'docker compose build --no-cache'
+                sh 'docker compose up -d'
             }
         }
 
