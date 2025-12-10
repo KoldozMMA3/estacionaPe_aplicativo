@@ -1,0 +1,50 @@
+pipeline {
+    agent any
+
+    environment {
+        DOCKER_IMAGE = "estacionape_backend"
+    }
+
+    stages {
+    
+        stage('Clonar código') {
+            steps {
+                git branch: 'main', url: 'https://github.com/KoldozMMA3/estacionaPe_aplicativo'
+            }
+        }
+
+        stage('Construir imagen Docker') {
+            steps {
+                sh 'docker build -t estacionape_backend .'
+            }
+        }
+
+        stage('Detener contenedores anteriores') {
+            steps {
+                sh 'docker compose down || true'
+            }
+        }
+
+        stage('Levantar servicios') {
+            steps {
+                sh 'docker compose up -d --build'
+            }
+        }
+
+        stage('Probar API está viva') {
+            steps {
+                sh 'sleep 10'
+                sh 'curl -f http://localhost:5000 || exit 1'
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'Deploy realizado con éxito 🎉'
+        }
+        failure {
+            echo 'Algo falló ❌'
+        }
+    }
+}
